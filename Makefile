@@ -46,6 +46,24 @@ $(MODULE_NAME)_tests.so : compile
 	@$(CC) -shared -o $(MODULE_NAME)_tests.so $(FILE_OBJS) $(TEST_OBJS) $(DEP_OBJS) $(TESTLIBS) $(CFLAGS)
 	@echo "[CC]\t-shared $(CFLAGS) -o $(MODULE_NAME)_tests.so"
 
+.PHONY : watch
+watch :
+	@command -v inotifywait >/dev/null 2>&1 || { \
+		echo >&2 "Please consider installing inotify-tools first. Aborting."; \
+		exit 1; \
+	}
+	@echo "Watching following file(s) for changes..."; \
+	find . -regextype sed -regex ".*\.[c|h]"; \
+	inotifywait -q -m -e modify `find . -regextype sed -regex ".*\.[c|h]"` | \
+		while read -r filename event; do \
+			make test; \
+			printf "\n\n"; \
+			printf "Wrtching following file(s) for changes...\n"; \
+			echo "-----------------------------------------------------------------------"; \
+			find . -regextype sed -regex ".*\.[c|h]"; \
+			printf "\n"; \
+		done; \
+
 .PHONY : test
 test : $(MODULE_NAME)_tests.so
 	@echo ""
