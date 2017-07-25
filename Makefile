@@ -17,7 +17,7 @@ TESTS := $(addsuffix .c,$(_TESTS))
 TEST_OBJS := $(addsuffix .o,$(_TESTS))
 
 # _DEPS must be set in each module
-#       It is recommended to use as least as possible dependencies
+# It is recommended to use no dependencies if it is possible
 DEPDIRS := $(dir $(_DEPS))
 DEP_OBJS := $(addsuffix .o,$(_DEPS))
 
