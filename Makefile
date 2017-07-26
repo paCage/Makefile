@@ -1,12 +1,14 @@
 # MODULE_NAME must be set in each module
 
 CC := gcc
-CFLAGS := -Wall -std=c11 -lm
-
+SHELL := /bin/bash
 MAKE := make compile
 
 TESTRUNNER := cgreen-runner
 TESTLIBS := -lcgreen
+
+# _LIBS (a list of libraries, e.g. -leagle) must be set inside a module Makefile
+CFLAGS := -Wall -std=c11 -lm $(_LIBS)
 
 # _FILES must be set in each module
 FILES := $(addsuffix .c,$(_FILES))
@@ -16,10 +18,8 @@ FILE_OBJS := $(addsuffix .o,$(_FILES))
 TESTS := $(addsuffix .c,$(_TESTS))
 TEST_OBJS := $(addsuffix .o,$(_TESTS))
 
-# _DEPS must be set in each module
-# It is recommended to use no dependencies if it is possible
-DEPDIRS := $(dir $(_DEPS))
-DEP_OBJS := $(addsuffix .o,$(_DEPS))
+LIB_NAME := lib$(MODULE_NAME).so
+TEST_FNAME := $(MODULE_NAME)_tests.so
 
 .PHONY : all
 all : test
@@ -42,9 +42,18 @@ dep_compile :
 .PHONY : compile
 compile : $(FILE_OBJS) $(TEST_OBJS) dep_compile
 
-$(MODULE_NAME)_tests.so : compile
-	@$(CC) -shared -o $(MODULE_NAME)_tests.so $(FILE_OBJS) $(TEST_OBJS) $(DEP_OBJS) $(TESTLIBS) $(CFLAGS)
-	@echo "[CC]\t-shared $(CFLAGS) -o $(MODULE_NAME)_tests.so"
+$(TEST_FNAME) : compile
+	@$(CC) -shared -o $(TEST_FNAME) $(FILE_OBJS) $(TEST_OBJS) $(DEP_OBJS) $(TESTLIBS) $(CFLAGS)
+	@echo "[CC]\t-shared $(CFLAGS) -o $(TEST_FNAME)"
+
+.PHONY : lib
+lib : $(FILE_OBJS)
+	@$(CC) -shared -Wl,-soname,$(LIB_NAME).1 -o $(LIB_NAME).1.0 $(FILE_OBJS)
+	@echo "[CC]\t-shared -Wl,-soname,$(LIB_NAME) -o $(LIB_NAME).1.0 $(FILE_OBJS)"
+	@read -p "Please enter a path to which the library must be moved: " lib_dir; \
+	mv ./$(LIB_NAME).1.0 $$lib_dir; \
+	ln -sf $$lib_dir/$(LIB_NAME).1.0 $$lib_dir/$(LIB_NAME).1; \
+	ln -sf $$lib_dir/$(LIB_NAME).1.0 $$lib_dir/$(LIB_NAME); \
 
 .PHONY : watch
 watch :
@@ -65,16 +74,16 @@ watch :
 		done; \
 
 .PHONY : test
-test : $(MODULE_NAME)_tests.so
+test : $(TEST_FNAME)
 	@echo ""
-	@echo "[TESTRUNNER]\t$(MODULE_NAME)_tests.so"
+	@echo "[TESTRUNNER]\t$(TEST_FNAME)"
 	@echo "-----------------------------------------------------------------------"
-	@$(TESTRUNNER) $(MODULE_NAME)_tests.so
+	@$(TESTRUNNER) $(TEST_FNAME)
 	@echo "-----------------------------------------------------------------------"
 
 .PHONY : clean
 clean :
-	rm -f $(MODULE_NAME)_tests.so $(FILE_OBJS) $(TEST_OBJS) $(DEP_OBJS)
+	rm -f $(TEST_FNAME) $(FILE_OBJS) $(TEST_OBJS) $(DEP_OBJS)
 
 define \n
 
