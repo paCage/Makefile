@@ -21,39 +21,55 @@ TEST_OBJS := $(addsuffix .o,$(_TESTS))
 LIB_NAME := lib$(MODULE_NAME).so
 TEST_FNAME := $(MODULE_NAME)_tests.so
 
+
 .PHONY : all
 all : test
+
 
 $(FILE_OBJS) : $(FILES)
 	@$(CC) -fPIC -c $(FILES) $(CFLAGS)
 	@echo "[CC]\t-fPIC -c $(FILES) $(CFLAGS)"
 
+
 $(TEST_OBJS) : $(TESTS) $(FILE_OBJS)
 	@$(CC) -fPIC -c $(TESTS) $(CFLAGS)
 	@echo "[CC]\t-fPIC -c $(TESTS) $(CFLAGS)"
+
 
 define dep_compile
 @echo "[MAKE]\t--directory $(1)"; $(MAKE) --directory $(1) $(\n)
 endef
 
+
 dep_compile :
 	$(foreach dir, $(DEPDIRS), $(call dep_compile, $(dir)))
 
+
 .PHONY : compile
 compile : $(FILE_OBJS) $(TEST_OBJS) dep_compile
+
 
 $(TEST_FNAME) : compile
 	@$(CC) -shared -o $(TEST_FNAME) $(FILE_OBJS) $(TEST_OBJS) $(DEP_OBJS) $(TESTLIBS) $(CFLAGS)
 	@echo "[CC]\t-shared $(CFLAGS) -o $(TEST_FNAME)"
 
+
 .PHONY : lib
 lib : $(FILE_OBJS)
 	@$(CC) -shared -Wl,-soname,$(LIB_NAME).1 -o $(LIB_NAME).1.0 $(FILE_OBJS)
 	@echo "[CC]\t-shared -Wl,-soname,$(LIB_NAME) -o $(LIB_NAME).1.0 $(FILE_OBJS)"
-	@read -p "Please enter a path to which the library must be moved: " lib_dir; \
-	mv ./$(LIB_NAME).1.0 $$lib_dir; \
-	ln -sf $$lib_dir/$(LIB_NAME).1.0 $$lib_dir/$(LIB_NAME).1; \
-	ln -sf $$lib_dir/$(LIB_NAME).1.0 $$lib_dir/$(LIB_NAME); \
+	@read -p "Please enter a path to accessible local directory (q for quit): " local_dir; \
+	if [ local_dir -eq 'q' ]; then \
+		exit; \
+	fi; \
+	mkdir -p $$local_dir/lib; \
+	mv ./$(LIB_NAME).1.0 $$local_dir/lib; \
+	ln -sf $$lib_dir/lib/$(LIB_NAME).1.0 $$lib_dir/lib/$(LIB_NAME).1; \
+	ln -sf $$lib_dir/lib/$(LIB_NAME).1.0 $$lib_dir/lib/$(LIB_NAME); \
+	cat *.h > $(MODULE_NAME).h; \
+	mkdir -p $$local_dir/include; \
+	mv ./$(MODULE_NAME).h $$local_dir/include; \
+
 
 .PHONY : watch
 watch :
@@ -73,6 +89,7 @@ watch :
 			printf "\n"; \
 		done; \
 
+
 .PHONY : test
 test : $(TEST_FNAME)
 	@echo ""
@@ -81,9 +98,11 @@ test : $(TEST_FNAME)
 	@$(TESTRUNNER) $(TEST_FNAME)
 	@echo "-----------------------------------------------------------------------"
 
+
 .PHONY : clean
 clean :
 	rm -f $(TEST_FNAME) $(FILE_OBJS) $(TEST_OBJS) $(DEP_OBJS)
+
 
 define \n
 
