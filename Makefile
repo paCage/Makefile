@@ -66,9 +66,14 @@ lib : $(FILE_OBJS)
 	mv ./$(LIB_NAME).1.0 $$local_dir/lib; \
 	ln -sf $$local_dir/lib/$(LIB_NAME).1.0 $$local_dir/lib/$(LIB_NAME).1; \
 	ln -sf $$local_dir/lib/$(LIB_NAME).1.0 $$local_dir/lib/$(LIB_NAME); \
-	cat *.h > $(MODULE_NAME).h; \
 	mkdir -p $$local_dir/include; \
-	mv ./$(MODULE_NAME).h $$local_dir/include; \
+	mkdir -p $$local_dir/include/$(MODULE_NAME); \
+	rm -f ./$(MODULE_NAME).h; \
+	for header in `ls *.h`; do \
+		printf "#include <%s/%s>\n" $(MODULE_NAME) $$header >> ./$(MODULE_NAME).h; \
+	done; \
+	mv ./$(MODULE_NAME).h $$local_dir/include/$(MODULE_NAME); \
+	cp *.h $$local_dir/include/$(MODULE_NAME); \
 
 
 .PHONY : watch
