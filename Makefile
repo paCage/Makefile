@@ -2,79 +2,59 @@
 
 CC := gcc
 FC := gfortran
+
 SHELL := /bin/bash
 MAKE := make compile
 
 TESTRUNNER := cgreen-runner
-TESTLIBS := -lcgreen
+TEST_LIBS := -lcgreen
 
-# _LIBS (a list of libraries, e.g. -leagle) must be set inside a module Makefile
-CFLAGS := -Wall -std=c11 $(_LIBS)
-FFLAGS := -Wall -std=f2003 $(_FORT_LIBS)
+# _CSRC C source files, must be set in each module
+C_OBJS := $(_CSRC:.c=.o)
 
-# _FILES must be set in each module
-FILE_OBJS := $(_FILES:.c=.o)
+# _FSRC fortran source files, must be set in eavc moudle
+F_OBJS := $(_FSRC:.f90=.o)
+F_MODS := $(shell echo $(_FSRC:.f90=.mod) | tr A-Z a-z)
 
-# _TESTS must be set in each module
-TEST_OBJS := $(_TESTS:.c=.o)
+# _TSRC cgreen tests files, must be set in each module
+TEST_OBJS := $(_TSRC:.c=.o)
 
-# _FSRC (fortran source codes) must be set in eavc moudle
-FORT_MODS := $(_FSRC:.f90=.mod)
-FORT_OBJS := $(_FSRC:.f90=.o)
+# _CLIBS a list of libraries, e.g. -leagle, must be set inside a module Makefile
+CFLAGS := -Wall -std=c11 $(_CLIBS)
 
-LIB_NAME := lib$(MODULE_NAME).so
-TEST_FNAME := $(MODULE_NAME)_tests.so
+# _FLIBS a list of libraries, e.g. -leagle, must be set inside a module Makefile
+FFLAGS := -Wall -std=f2003 $(_FLIBS)
 
+# Final library file
+LIB_FILE := lib$(MODULE_NAME).so
 
-.PHONY : all
-all : test
-
-
-$(FILE_OBJS) : $(_FILES)
-	@echo "[CC]\t-fPIC -c $(_FILES) $(CFLAGS)"
-	@$(CC) -fPIC -c $(_FILES) $(CFLAGS)
-
-
-$(TEST_OBJS) : $(_TESTS) $(FILE_OBJS)
-	@echo "[CC]\t-fPIC -c $(_TESTS) $(CFLAGS)"
-	@$(CC) -fPIC -c $(_TESTS) $(CFLAGS)
-
-
-$(FORT_MODS): $(_FSRC)
-	@echo "[FC]\t $(FFLAGS) -c $(_FSRC)"
-	$(FC) $(FFLAGS) -c $(_FSRC)
-
-
-define dep_compile
-@echo "[MAKE]\t--directory $(1)"; $(MAKE) --directory $(1) $(\n)
-endef
-
-
-dep_compile :
-	$(foreach dir, $(DEPDIRS), $(call dep_compile, $(dir)))
+# Test file name
+TEST_FILE := $(MODULE_NAME)_tests.so
 
 
 .PHONY : compile
-compile : $(FILE_OBJS) $(TEST_OBJS) dep_compile
+compile : $(C_OBJS) $(TEST_OBJS)
 
 
-$(TEST_FNAME) : compile
-	@echo "[CC]\t-shared $(CFLAGS) -o $(TEST_FNAME)"
-	@$(CC) -shared -o $(TEST_FNAME) $(FILE_OBJS) $(TEST_OBJS) $(DEP_OBJS) $(TESTLIBS) $(CFLAGS)
+.PHONY : $(TEST_FILE)
+$(TEST_FILE) : $(C_OBJS) $(TEST_OBJS)
+	echo $(C_OBJS)
+	@echo "[CC] -shared -o $(TEST_FILE) $(C_OBJS) $(TEST_OBJS) $(CFLAGS) $(TEST_LIBS)"
+	@$(CC) -shared -o $(TEST_FILE) $(C_OBJS) $(TEST_OBJS) $(CFLAGS) $(TEST_LIBS)
 
 
-.PHONY : lib
-lib : $(FILE_OBJS) $(FORT_MODS)
-	@echo "[CC]\t-shared -Wl,-soname,$(LIB_NAME) -o $(LIB_NAME).1.0 $(FILE_OBJS)"
-	@$(CC) -shared -Wl,-soname,$(LIB_NAME).1 -o $(LIB_NAME).1.0 $(FILE_OBJS)
-	@read -p "Please enter a path to accessible local directory (q for quit): " local_dir; \
+.PHONY : install
+install : $(C_OBJS) $(F_MODS)
+	@echo "[CC] -shared -Wl,-soname,$(LIB_FILE) -o $(LIB_FILE).1.0 $(C_OBJS)"
+	@$(CC) -shared -Wl,-soname,$(LIB_FILE).1 -o $(LIB_FILE).1.0 $(C_OBJS)
+	@read -p "Please enter the path to an  accessible local directory (q for quit): " local_dir; \
 	if [ "$$local_dir" == "q" ]; then \
 		exit; \
 	fi; \
 	mkdir -p $$local_dir/lib; \
-	mv ./$(LIB_NAME).1.0 $$local_dir/lib; \
-	ln -sf $$local_dir/lib/$(LIB_NAME).1.0 $$local_dir/lib/$(LIB_NAME).1; \
-	ln -sf $$local_dir/lib/$(LIB_NAME).1.0 $$local_dir/lib/$(LIB_NAME); \
+	mv ./$(LIB_FILE).1.0 $$local_dir/lib; \
+	ln -sf $$local_dir/lib/$(LIB_FILE).1.0 $$local_dir/lib/$(LIB_FILE).1; \
+	ln -sf $$local_dir/lib/$(LIB_FILE).1.0 $$local_dir/lib/$(LIB_FILE); \
 	mkdir -p $$local_dir/include; \
 	mkdir -p $$local_dir/include/$(MODULE_NAME); \
 	rm -f ./$(MODULE_NAME).h; \
@@ -106,20 +86,29 @@ watch :
 
 
 .PHONY : test
-test : $(TEST_FNAME)
+test : $(TEST_FILE)
 	@echo ""
-	@echo "[TESTRUNNER]\t$(TEST_FNAME)"
+	@echo "[TESTRUNNER] $(TEST_FILE)"
 	@echo "-----------------------------------------------------------------------"
-	@$(TESTRUNNER) $(TEST_FNAME)
+	@$(TESTRUNNER) $(TEST_FILE)
 	@echo "-----------------------------------------------------------------------"
+
+
+$(C_OBJS) : $(_CSRC)
+	@echo "[CC] -fPIC -c $(_CSRC) $(CFLAGS)"
+	@$(CC) -fPIC -c $(_CSRC) $(CFLAGS)
+
+
+$(TEST_OBJS) : $(_TSRC) $(C_OBJS)
+	@echo "[CC] -fPIC -c $(_TSRC) $(CFLAGS)"
+	@$(CC) -fPIC -c $(_TSRC) $(CFLAGS)
+
+
+$(F_MODS): $(_FSRC)
+	@echo "[FC] $(FFLAGS) -c $(_FSRC)"
+	@$(FC) $(FFLAGS) -c $(_FSRC)
 
 
 .PHONY : clean
 clean :
-	@rm -fv $(TEST_FNAME) $(FILE_OBJS) $(TEST_OBJS) $(DEP_OBJS) $(FORT_MODS) $(FORT_OBJS)
-
-
-define \n
-
-
-endef
+	@rm -fv $(TEST_FILE) $(C_OBJS) $(TEST_OBJS) $(DEP_OBJS) $(F_MODS) $(F_OBJS) $(LIB_FILE).1.0
