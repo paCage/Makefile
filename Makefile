@@ -26,7 +26,8 @@ CFLAGS := -Wall -std=c11 $(_CLIBS)
 FFLAGS := -Wall -std=f2003 $(_FLIBS)
 
 # Final library file
-LIB_FILE := lib$(MODULE_NAME).so
+CLIB_FILE := lib$(MODULE_NAME).so
+FLIB_FILE := lib$(MODULE_NAME)_f.so
 
 # Test file name
 TEST_FILE := $(MODULE_NAME)_tests.so
@@ -45,25 +46,36 @@ $(TEST_FILE) : $(C_OBJS) $(TEST_OBJS)
 
 .PHONY : install
 install : $(C_OBJS) $(F_MODS)
-	@echo "[CC] -shared -Wl,-soname,$(LIB_FILE) -o $(LIB_FILE).1.0 $(C_OBJS)"
-	@$(CC) -shared -Wl,-soname,$(LIB_FILE).1 -o $(LIB_FILE).1.0 $(C_OBJS)
-	@read -p "Please enter the path to an  accessible local directory (q for quit): " local_dir; \
+	@echo "[CC] -shared -Wl,-soname,$(CLIB_FILE).1 -o $(CLIB_FILE).1.0 $(C_OBJS)"
+	@$(CC) -shared -Wl,-soname,$(CLIB_FILE).1 -o $(CLIB_FILE).1.0 $(C_OBJS)
+
+	@if [ "$(_FSRC)" != "" ]; then \
+		echo "[FC] -shared -o $(FLIB_FILE).1.0 $(_FSRC) -fPIC $(FFLAGS)"; \
+		$(FC) -shared -o $(FLIB_FILE).1.0 $(_FSRC) -fPIC $(FFLAGS); \
+	fi \
+
+	@read -p "Please enter a path to accessible local directory (q for quit): " local_dir; \
 	if [ "$$local_dir" == "q" ]; then \
 		exit; \
 	fi; \
 	mkdir -p $$local_dir/lib; \
-	mv ./$(LIB_FILE).1.0 $$local_dir/lib; \
-	ln -sf $$local_dir/lib/$(LIB_FILE).1.0 $$local_dir/lib/$(LIB_FILE).1; \
-	ln -sf $$local_dir/lib/$(LIB_FILE).1.0 $$local_dir/lib/$(LIB_FILE); \
 	mkdir -p $$local_dir/include; \
 	mkdir -p $$local_dir/include/$(MODULE_NAME); \
+	mv ./$(CLIB_FILE).1.0 $$local_dir/lib; \
+	ln -sf $$local_dir/lib/$(CLIB_FILE).1.0 $$local_dir/lib/$(CLIB_FILE).1; \
+	ln -sf $$local_dir/lib/$(CLIB_FILE).1.0 $$local_dir/lib/$(CLIB_FILE); \
 	rm -f ./$(MODULE_NAME).h; \
 	for header in `ls *.h`; do \
 		printf "#include <%s/%s>\n" $(MODULE_NAME) $$header >> ./$(MODULE_NAME).h; \
 	done; \
 	mv ./$(MODULE_NAME).h $$local_dir/include/$(MODULE_NAME); \
 	cp *.h $$local_dir/include/$(MODULE_NAME); \
-	cp *.mod $$local_dir/include; \
+	if [ "$(_FSRC)" != "" ]; then \
+		mv ./$(FLIB_FILE).1.0 $$local_dir/lib; \
+		ln -sf $$local_dir/lib/$(FLIB_FILE).1.0 $$local_dir/lib/$(FLIB_FILE).1; \
+		ln -sf $$local_dir/lib/$(FLIB_FILE).1.0 $$local_dir/lib/$(FLIB_FILE); \
+		cp *.mod $$local_dir/include; \
+	fi \
 
 
 .PHONY : watch
@@ -111,4 +123,4 @@ $(F_MODS): $(_FSRC)
 
 .PHONY : clean
 clean :
-	@rm -fv $(TEST_FILE) $(C_OBJS) $(TEST_OBJS) $(DEP_OBJS) $(F_MODS) $(F_OBJS) $(LIB_FILE).1.0
+	@rm -fv $(TEST_FILE) $(C_OBJS) $(TEST_OBJS) $(DEP_OBJS) $(F_MODS) $(F_OBJS) $(CLIB_FILE).1.0  $(FLIB_FILE).1.0
