@@ -75,6 +75,16 @@ install : $(C_OBJS) $(F_MODS)
 	fi \
 
 
+.PHONY : uninstall
+uninstall:
+	@echo $(addprefix $(LOCAL_DIR)/include/, $(F_MODS))
+	@rm -rfv \
+		${LOCAL_DIR}/include/$(MODULE_NAME) \
+		${LOCAL_DIR}/lib/$(CLIB_FILE){.1.0,.1,} \
+		${LOCAL_DIR}/lib/$(FLIB_FILE){.1.0,.1,} \
+		$(addprefix $(LOCAL_DIR)/include/, $(F_MODS))
+
+
 .PHONY : watch
 watch :
 	@command -v inotifywait >/dev/null 2>&1 || { \
