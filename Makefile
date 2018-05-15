@@ -1,133 +1,124 @@
-# MODULE_NAME must be set in each module
+# MODULE_NAME, MAJOR, MINOR and PATCH must be set for each module
+# OBJS must be set for each module
+
+SHELL := /bin/bash
 
 CC := gcc
 FC := gfortran
-
-SHELL := /bin/bash
-MAKE := make compile
+RM := rm -f -v
+AR := ar -q
+LN := ln -s
+CP := cp
+MKDIR := mkdir -p
+TOUCH := touch
 
 TESTRUNNER := cgreen-runner
-TEST_LIBS := -lcgreen
+TESTLIB := -lcgreen
 
-# _CSRC C source files, must be set in each module
-C_OBJS := $(_CSRC:.c=.o)
+BINDIR := ./bin
+OBJDIR := ./obj
+SRCDIR := ./src
+LIBDIR := ./lib
+TESTDIR := ./tests
+INCLUDEDIR := ./include
 
-# _FSRC fortran source files, must be set in eavc moudle
-F_OBJS := $(_FSRC:.f90=.o)
-F_MODS := $(shell echo $(_FSRC:.f90=.mod) | tr A-Z a-z)
-
-# _TSRC cgreen tests files, must be set in each module
-TEST_OBJS := $(_TSRC:.c=.o)
-
-# _CLIBS a list of libraries, e.g. -leagle, must be set inside a module Makefile
-CFLAGS := -Wall -std=c11 $(_CLIBS)
-
-# _FLIBS a list of libraries, e.g. -leagle, must be set inside a module Makefile
-FFLAGS := -Wall -std=f2003 $(_FLIBS)
-
-# Final library file
-CLIB_FILE := lib$(MODULE_NAME).so
-FLIB_FILE := lib$(MODULE_NAME)_f.so
-
-# Test file name
-TEST_FILE := $(MODULE_NAME)_tests.so
+HEADER_FILES := `ls $(SRCDIR)/*.h;`
+HEADER_DIR := $(INCLUDEDIR)/$(MODULE_NAME)
+HEADER_MAIN := $(INCLUDEDIR)/$(MODULE_NAME)/$(MODULE_NAME).h
 
 
-.PHONY : compile
-compile : $(C_OBJS) $(TEST_OBJS)
+_OBJS := $(foreach obj, $(OBJS), $(OBJDIR)/$(obj))
+_TEST_OBJS := $(foreach obj, $(TEST_OBJS), $(OBJDIR)/$(obj))
+
+LIBS += $(foreach lib, $(paCages), -L $(LIBDIR)/$(lib)/$(LIBDIR) -l$(lib))
+INCLUDES += -I $(INCLUDEDIR)
 
 
-.PHONY : $(TEST_FILE)
-$(TEST_FILE) : $(C_OBJS) $(TEST_OBJS)
-	echo $(C_OBJS)
-	@echo "[CC] -shared -o $(TEST_FILE) $(C_OBJS) $(TEST_OBJS) $(CFLAGS) $(TEST_LIBS)"
-	@$(CC) -shared -o $(TEST_FILE) $(C_OBJS) $(TEST_OBJS) $(CFLAGS) $(TEST_LIBS)
+CFLAGS := -Wall -std=c11 $(LIBS) $(INCLUDES)
+FFLAGS := -Wall -std=f2003 $(LIBS) $(INCLUDES)
+
+
+STATIC_LIB_FILE := $(LIBDIR)/lib$(MODULE_NAME).a
+SHARED_LIB_FILE := $(LIBDIR)/lib$(MODULE_NAME).so
+TEST_FILE := $(TESTDIR)/$(MODULE_NAME)_tests.so
+
+
+VPATH := $(VPATH):$(SRCDIR):$(TESTDIR)
+
+
+.PHONY: compile
+compile: $(_OBJS) $(paCages)
+
+
+.PHONY: test
+test: CFLAGS := -fPIC $(CFLAGS)
+test: FFLAGS := -fPIC $(FFLAGS)
+test: clean $(TEST_FILE)
+	$(TESTRUNNER) $(TEST_FILE)
+
+$(TEST_FILE): $(_TEST_OBJS) $(_OBJS) $(paCages)
+	$(CC) -shared -o $@ $^ $(CFLAGS) $(TESTLIB)
+
+
+.PHONY: lib_static
+lib_static: | cp_headers $(STATIC_LIB_FILE)
+
+$(STATIC_LIB_FILE): | clean $(_OBJS) $(paCages)
+	$(AR) $@ $(_OBJS)
+
+
+.PHONY: lib_shared
+lib_shared: | cp_headers $(SHARED_LIB_FILE)
+
+$(SHARED_LIB_FILE): CFLAGS := -fPIC $(CFLAGS)
+$(SHARED_LIB_FILE): FFLAGS := -fPIC $(FFLAGS)
+$(SHARED_LIB_FILE): | clean $(_OBJS) $(paCages)
+	$(CC) -shared -Wl,-soname,$(SHARED_LIB_FILE).$(MAJOR) \
+	-o $(SHARED_LIB_FILE).$(MAJOR).$(MINOR) $(_OBJS)
+
+
+.PHONY: cp_headers
+	$(MKDIR) $(HEADER_DIR)
+	$(TOUCH) $(HEADER_MAIN)
+	$(CP) $(SRCDIR)/*.h $(HEADER_DIR)
+	@for h in $(HEADER_FILES); do \
+		printf "#include <%s/%s>" $(MODULE_NAME) $(h) >> $(HEADER_MAIN); \
+	done;
+
+
+$(OBJDIR)/%.o: %.c
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+$(OBJDIR)/%.o: %.f90
+	$(FC) -c $(FFLAGS) -o $@ $< -J $(INCLUDEDIR)
+
+
+.PHONY: $(paCages)
+$(paCages):
+	@for lib in $(paCages); do \
+		make lib_static -C $$lib; \
+	done;
 
 
 LOCAL_DIR := ${HOME}/.local
-.PHONY : install
-install : $(C_OBJS) $(F_MODS)
-	@echo "[CC] -shared -Wl,-soname,$(CLIB_FILE).1 -o $(CLIB_FILE).1.0 $(C_OBJS)"
-	@$(CC) -shared -Wl,-soname,$(CLIB_FILE).1 -o $(CLIB_FILE).1.0 $(C_OBJS)
-
-	@if [ "$(_FSRC)" != "" ]; then \
-		echo "[FC] -shared -o $(FLIB_FILE).1.0 $(_FSRC) -fPIC $(FFLAGS)"; \
-		$(FC) -shared -o $(FLIB_FILE).1.0 $(_FSRC) -fPIC $(FFLAGS); \
-	fi \
-
-	@mkdir -p ${LOCAL_DIR}/lib;
-	@mkdir -p ${LOCAL_DIR}/include;
-	@mkdir -p ${LOCAL_DIR}/include/$(MODULE_NAME);
-	@mv ./$(CLIB_FILE).1.0 ${LOCAL_DIR}/lib;
-	@ln -sf ${LOCAL_DIR}/lib/$(CLIB_FILE).1.0 ${LOCAL_DIR}/lib/$(CLIB_FILE).1;
-	@ln -sf ${LOCAL_DIR}/lib/$(CLIB_FILE).1.0 ${LOCAL_DIR}/lib/$(CLIB_FILE);
-	@rm -f ./$(MODULE_NAME).h;
-	@for header in `ls *.h`; do \
-		printf "#include <%s/%s>\n" $(MODULE_NAME) $$header >> ./$(MODULE_NAME).h; \
-	done;
-	@mv ./$(MODULE_NAME).h ${LOCAL_DIR}/include/$(MODULE_NAME);
-	@cp *.h ${LOCAL_DIR}/include/$(MODULE_NAME);
-	@if [ "$(_FSRC)" != "" ]; then \
-		mv ./$(FLIB_FILE).1.0 ${LOCAL_DIR}/lib; \
-		ln -sf ${LOCAL_DIR}/lib/$(FLIB_FILE).1.0 ${LOCAL_DIR}/lib/$(FLIB_FILE).1; \
-		ln -sf ${LOCAL_DIR}/lib/$(FLIB_FILE).1.0 ${LOCAL_DIR}/lib/$(FLIB_FILE); \
-		cp *.mod ${LOCAL_DIR}/include; \
-	fi \
+.PHONY: install
+install: $(C_OBJS) $(F_MODS)
 
 
-.PHONY : uninstall
+.PHONY: uninstall
 uninstall:
-	@echo $(addprefix $(LOCAL_DIR)/include/, $(F_MODS))
-	@rm -rfv \
-		${LOCAL_DIR}/include/$(MODULE_NAME) \
-		${LOCAL_DIR}/lib/$(CLIB_FILE){.1.0,.1,} \
-		${LOCAL_DIR}/lib/$(FLIB_FILE){.1.0,.1,} \
-		$(addprefix $(LOCAL_DIR)/include/, $(F_MODS))
 
 
-.PHONY : watch
-watch :
-	@command -v inotifywait >/dev/null 2>&1 || { \
-		echo >&2 "Please consider installing inotify-tools first. Aborting."; \
-		exit 1; \
-	}
-	@echo "Watching following file(s) for changes..."; \
-	find . -regextype sed -regex ".*\.[c|h]"; \
-	inotifywait -q -m -e modify `find . -regextype sed -regex ".*\.[c|h]"` | \
-		while read -r filename event; do \
-			make test; \
-			printf "\n\n"; \
-			printf "Wrtching following file(s) for changes...\n"; \
-			echo "-----------------------------------------------------------------------"; \
-			find . -regextype sed -regex ".*\.[c|h]"; \
-			printf "\n"; \
-		done; \
+.PHONY: watch
+watch:
+	$(eval FILES := `find . -regextype sed -regex ".*[?\.git][a-zA-Z0-9].[f|f90|c]"`)
+	@printf "Watching following file(s)...\n$(FILES)\n"
+	@[ command -v inotifywait >/dev/null 2>&1 ] && exit || true;
+	@inotifywait -q -m -e modify $(FILES) | \
+	while read -r filename event; do make; done;
 
 
-.PHONY : test
-test : $(TEST_FILE)
-	@echo ""
-	@echo "[TESTRUNNER] $(TEST_FILE)"
-	@echo "-----------------------------------------------------------------------"
-	@$(TESTRUNNER) $(TEST_FILE)
-	@echo "-----------------------------------------------------------------------"
-
-
-$(C_OBJS) : $(_CSRC)
-	@echo "[CC] -fPIC -c $(_CSRC) $(CFLAGS)"
-	@$(CC) -fPIC -c $(_CSRC) $(CFLAGS)
-
-
-$(TEST_OBJS) : $(_TSRC) $(C_OBJS)
-	@echo "[CC] -fPIC -c $(_TSRC) $(CFLAGS)"
-	@$(CC) -fPIC -c $(_TSRC) $(CFLAGS)
-
-
-$(F_MODS): $(_FSRC)
-	@echo "[FC] $(FFLAGS) -c $(_FSRC)"
-	@$(FC) $(FFLAGS) -c $(_FSRC)
-
-
-.PHONY : clean
-clean :
-	@rm -fv $(TEST_FILE) $(C_OBJS) $(TEST_OBJS) $(DEP_OBJS) $(F_MODS) $(F_OBJS) $(CLIB_FILE).1.0  $(FLIB_FILE).1.0
+.PHONY: clean
+clean:
+	$(RM) $(_OBJS) $(_TEST_OBJS) $(TEST_FILE)
+	$(RM) $(STATIC_LIB_FILE) $(SHARED_LIB_FILE).$(MAJOR).$(MINOR)
